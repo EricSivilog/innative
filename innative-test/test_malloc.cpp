@@ -1,13 +1,12 @@
-// Copyright (c)2019 Black Sphere Studios
+// Copyright (c)2020 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include "test.h"
-#include "../innative/util.h"
+#include "../innative/utility.h"
 #include <functional>
 #include <map>
 
 using namespace innative;
-using namespace utility;
 
 static const int WASM_PAGE = (1 << 16);
 static const int MAX_PAGES = 32;
@@ -110,12 +109,12 @@ void TestHarness::test_malloc()
     {
       auto index = tracker.begin();
       std::advance(index, rand() % tracker.size());
-      void* p    = (*index).first;
+      uint8_t* p = reinterpret_cast<uint8_t*>((*index).first);
       size_t len = (*index).second;
 
       bool valid = true;
       for(size_t j = 0; j < len; ++j)
-        valid = valid && ((uint8_t*)p)[j] == 0xF0;
+        valid = valid && p[j] == 0xF0;
       TEST(valid);
 
       memset(p, 0, len);

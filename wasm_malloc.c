@@ -1,42 +1,42 @@
-// Copyright (c)2019 Black Sphere Studios
+// Copyright (c)2020 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include <stddef.h>
 #include <stdint.h>
 
-#define WASM_PAGE_POWER 16
-#define WASM_PAGE_SIZE (1 << WASM_PAGE_POWER)
-#define MIN_ALLOC_POWER 4
-#define MIN_ALLOC_SIZE (1 << MIN_ALLOC_POWER)
+#define WASM_PAGE_POWER    16
+#define WASM_PAGE_SIZE     (1 << WASM_PAGE_POWER)
+#define MIN_ALLOC_POWER    4
+#define MIN_ALLOC_SIZE     (1 << MIN_ALLOC_POWER)
 #define ALLOC_GROWTH_POWER 2
-#define ALLOC_GROWTH_RATE (1 << ALLOC_GROWTH_POWER)
+#define ALLOC_GROWTH_RATE  (1 << ALLOC_GROWTH_POWER)
 
 // A full binary tree of n levels has 2^n - 1 nodes, and the lowest level has half the nodes, so we count how many bytes
 // are available, divide by 2, and multiply by the minimum allocation size to get how many bytes each bitmap page addresses.
 // This is 2^p / 2 * 2^n, which is equal to 2^(p - 1 + n)
 #define PAGE_ALLOC_POWER (WASM_PAGE_POWER + MIN_ALLOC_POWER - 1)
-#define PAGE_ALLOC_SIZE (1 << PAGE_ALLOC_POWER)
+#define PAGE_ALLOC_SIZE  (1 << PAGE_ALLOC_POWER)
 
 #define HEAP_PARENT(i) ((i - 1) / 2)
-#define HEAP_LEFT(i) ((i << 1) + 1)
-#define HEAP_RIGHT(i) ((i << 1) + 2)
-#define HEAP_SIZE(i) ((size_t)1 << (i + MIN_ALLOC_POWER - 1))
+#define HEAP_LEFT(i)   ((i << 1) + 1)
+#define HEAP_RIGHT(i)  ((i << 1) + 2)
+#define HEAP_SIZE(i)   ((size_t)1 << (i + MIN_ALLOC_POWER - 1))
 
 #ifdef TESTING_WASM
-#include <string.h>
-#define MALLOC wasm_malloc
-#define FREE wasm_free
-#define REALLOC wasm_realloc
-#define CALLOC wasm_calloc
-#define EXPORT
+  #include <string.h>
+  #define MALLOC  wasm_malloc
+  #define FREE    wasm_free
+  #define REALLOC wasm_realloc
+  #define CALLOC  wasm_calloc
+  #define EXPORT
 size_t __builtin_wasm_memory_size(size_t memory);
 size_t __builtin_wasm_memory_grow(size_t memory, size_t delta);
 #else
-#define EXPORT __attribute__((visibility("default")))
-#define MALLOC malloc
-#define FREE free
-#define REALLOC realloc
-#define CALLOC calloc
+  #define EXPORT  __attribute__((visibility("default")))
+  #define MALLOC  malloc
+  #define FREE    free
+  #define REALLOC realloc
+  #define CALLOC  calloc
 
 EXPORT void* memcpy(void* pdest, const void* psrc, size_t sz)
 {
@@ -74,7 +74,7 @@ EXPORT void* memcpy(void* pdest, const void* psrc, size_t sz)
 EXPORT void* memset(void* ptr, int value, size_t num)
 {
   uint64_t v = (value & 0xFF) * 0x0101010101010101ULL;
-  uint8_t* p = ptr;
+  uint8_t* p = (uint8_t*)ptr;
 
   // Align pointer
   for(; ((size_t)p % sizeof(uint64_t)) != 0 && num != 0; num -= 1)
@@ -174,7 +174,7 @@ size_t _find_indice(void* ptr, uint8_t* heap, size_t capacity, uint8_t* size)
   *size = sz;
   return index;
 }
-
+/*
 char _verify_ptr(void* ptr)
 {
   size_t capacity;
@@ -218,8 +218,7 @@ char _verify_heap(size_t index, uint8_t* heap, size_t capacity, char allocated)
 
 char _verify_heaps()
 {
-  uint8_t* end = (uint8_t*)(__builtin_wasm_memory_size(0) * WASM_PAGE_SIZE);
-  ;
+  uint8_t* end    = (uint8_t*)(__builtin_wasm_memory_size(0) * WASM_PAGE_SIZE);
   uint8_t* heap   = HeapRoot;
   size_t capacity = 1;
 
@@ -232,12 +231,11 @@ char _verify_heaps()
   }
 
   return 1;
-}
+}*/
 
 EXPORT void* MALLOC(size_t num)
 {
   uint8_t* end = (uint8_t*)(__builtin_wasm_memory_size(0) * WASM_PAGE_SIZE);
-  ;
 
   // The root of malloc is the only pointer in this entire program that can legally be 0, but the C++ compiler doesn't know
   // that, so we have to account for this
@@ -261,11 +259,9 @@ EXPORT void* MALLOC(size_t num)
 
   size_t length = capacity * WASM_PAGE_SIZE;
 
-  if(heap >=
-     end) // If our current heap points past addressable memory, there are no buckets large enough for this allocation
+  if(heap >= end) // If our current heap points past addressable memory, there are no buckets large enough for this allocation
   {
-    _wasm_allocate_to_end(heap,
-                          end); // Make sure that the most recent bucket (the one at root) has allocated all possible pages
+    _wasm_allocate_to_end(heap, end); // Make sure the most recent bucket (the one at root) has allocated all possible pages
 
     // Then we allocate pages for the bytemap, plus one additional page
     heap = (uint8_t*)(__builtin_wasm_memory_grow(0, capacity) * WASM_PAGE_SIZE);
@@ -335,7 +331,19 @@ EXPORT void FREE(void* ptr)
   size_t index = _find_indice(ptr, heap, capacity, &size);
 
   if(index == (size_t)~0)
-    index /= 0;
+  {
+#ifdef _MSC_VER
+  #ifdef _M_ARM64
+    __break(-1);
+  #elif defined(_M_ARM)
+    __trap(-1);
+  #else
+    __ud2();
+  #endif
+#else
+    __builtin_trap();
+#endif
+  }
 
   // Set this node as free, and recalculate it's parent free size
   heap[index] = size;

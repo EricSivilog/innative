@@ -1,4 +1,4 @@
-// Copyright (c)2019 Black Sphere Studios
+// Copyright (c)2020 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #ifndef IN__SCHEMA_H
@@ -9,6 +9,8 @@
 #include "innative/errors.h"
 #include "innative/opcodes.h"
 #include "innative/flags.h"
+#include "innative/module.h"
+#include "innative/sourcemap.h"
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
@@ -16,9 +18,12 @@
 #include <assert.h>
 
 #define kh_exist2(h, x) ((x < kh_end(h)) && kh_exist(h, x))
+#define MUTABLE
 
 #ifdef __cplusplus
-#include <string>
+  #undef MUTABLE
+  #define MUTABLE mutable
+  #include <string>
 extern "C" {
 #endif
 
@@ -83,7 +88,7 @@ enum WASM_KIND
   WASM_KIND_FUNCTION = 0,
   WASM_KIND_TABLE    = 1,
   WASM_KIND_MEMORY   = 2,
-  WASM_KIND_GLOBAL   = 3
+  WASM_KIND_GLOBAL   = 3,
 };
 
 struct IN_WASM_ENVIRONMENT;
@@ -92,11 +97,11 @@ struct IN_WASM_ENVIRONMENT;
 typedef struct IN_WASM_BYTE_ARRAY
 {
 #ifdef __cplusplus
-  IN_WASM_BYTE_ARRAY() : bytes(nullptr), n_bytes(0) {}
-  IN_WASM_BYTE_ARRAY(uint8_t* b, varuint32 n) : bytes(b), n_bytes(n) {}
+  IN_WASM_BYTE_ARRAY() : n_bytes(0), bytes(nullptr) {}
+  IN_WASM_BYTE_ARRAY(uint8_t* b, varuint32 n) : n_bytes(n), bytes(b) {}
   inline uint8_t* get() { return bytes; }
   inline const uint8_t* get() const { return bytes; }
-  inline const char* str() const { return (char*)bytes; }
+  inline const char* str() const { return !bytes ? "" : reinterpret_cast<const char*>(bytes); }
   inline varuint32 size() const { return n_bytes; }
   void resize(varuint32 sz, bool terminator, const struct IN_WASM_ENVIRONMENT& env);
   void discard(varuint32 sz, bool terminator);
@@ -112,6 +117,11 @@ typedef struct IN_WASM_BYTE_ARRAY
   {
     assert(i < n_bytes);
     return bytes[i];
+  }
+
+  static IN_WASM_BYTE_ARRAY Identifier(const char* s, size_t l)
+  {
+    return IN_WASM_BYTE_ARRAY(reinterpret_cast<uint8_t*>(const_cast<char*>(s)), static_cast<varuint32>(l));
   }
 
 protected:
@@ -218,7 +228,7 @@ typedef struct IN_WASM_FUNCTION_DESC
 {
   varuint32 type_index;
   DebugInfo debug;
-  DebugInfo* param_names; // Always the size of n_params from the signature
+  DebugInfo* param_debug; // Always the size of n_params from the signature, or NULL
 } FunctionDesc;
 
 // Represents a single webassembly import definition
@@ -226,7 +236,9 @@ typedef struct IN_WASM_IMPORT
 {
   Identifier module_name;
   Identifier export_name;
-  varuint7 kind; // WASM_KIND
+  varuint7 kind;          // WASM_KIND
+  MUTABLE bool alternate; // Internal flag - if true, this import's canonical name always includes the module name
+  MUTABLE bool ignore;
   union
   {
     FunctionDesc func_desc;
@@ -253,17 +265,25 @@ typedef struct IN_WASM_TABLE_INIT
   varuint32* elements;
 } TableInit;
 
+// Stores a local declaration, which includes the count and debug information.
+typedef struct IN_WASM_FUNCTION_LOCAL
+{
+  varuint32 count; // We need to keep track of this to reconstruct arrays
+  varsint7 type;
+  DebugInfo debug; // If a name section specifies a local in the middle of a compressed array, we split it off
+} FunctionLocal;
+
 // Defines the locals, instructions, and debug information for a webassembly function body
 typedef struct IN_WASM_FUNCTION_BODY
 {
-  varuint32 body_size;
+  FunctionLocal* locals;
   varuint32 n_locals;
-  varsint7* locals;
+  varuint32 local_size; // total number of individual locals (sum of all counts)
   Instruction* body;
-  varuint32 n_body;       // INTERNAL: track actual number of instructions
-  DebugInfo* local_names; // INTERNAL: debug names of locals, always the size of n_locals or NULL if it doesn't exist
-  DebugInfo* param_names; // INTERNAL: debug names of parameters, always the size of n_params or NULL if it doesn't exist
-  DebugInfo debug;
+  varuint32 n_body;    // track actual number of instructions
+  varuint32 body_size; // track number of bytes used by instruction section
+  unsigned int line;
+  unsigned int column;
 } FunctionBody;
 
 // Encodes initialization data for a data section
@@ -280,23 +300,21 @@ typedef struct IN_WASM_CUSTOM_SECTION
   varuint7 opcode;
   varuint32 payload;
   Identifier name; // The first thing in a custom section must always be a legal identifier
-  uint8_t* data;
+  const uint8_t* data;
 } CustomSection;
 
 #ifdef __cplusplus
 namespace innative {
-  namespace code {
-    struct Context;
-  }
+  struct Compiler;
 }
-typedef innative::code::Context IN_CODE_CONTEXT;
+typedef innative::Compiler IN_CODE_compiler;
 namespace llvm {
   class LLVMContext;
 }
-typedef llvm::LLVMContext LLVM_LLVM_CONTEXT;
+typedef llvm::LLVMContext LLVM_LLVM_compiler;
 #else
-typedef void IN_CODE_CONTEXT;
-typedef void LLVM_LLVM_CONTEXT;
+typedef void IN_CODE_compiler;
+typedef void LLVM_LLVM_compiler;
 #endif
 
 // Represents a single webassembly module
@@ -309,8 +327,8 @@ typedef struct IN_WASM_MODULE
 
   struct TypeSection
   {
-    varuint32 n_functions;
-    FunctionType* functions;
+    varuint32 n_functypes;
+    FunctionType* functypes;
   } type;
 
   struct ImportSection
@@ -329,7 +347,7 @@ typedef struct IN_WASM_MODULE
   struct FunctionSection
   {
     varuint32 n_funcdecl;
-    varuint32* funcdecl;
+    FunctionDesc* funcdecl;
   } function;
 
   struct TableSection
@@ -357,6 +375,7 @@ typedef struct IN_WASM_MODULE
   } exportsection;
 
   varuint32 start;
+  int start_line; // The start function line is used to represent the entry point function to make debugging easier
 
   struct ElementSection
   {
@@ -378,10 +397,11 @@ typedef struct IN_WASM_MODULE
 
   size_t n_custom;
   CustomSection* custom;
+  SourceMap* sourcemap;
 
   struct kh_exports_s* exports;
-  const char* path;       // For debugging purposes, store path to source .wat file, if it exists.
-  IN_CODE_CONTEXT* cache; // If non-zero, points to a cached compilation of this module
+  const char* filepath;   // For debugging purposes, store path to the original file, if it exists
+  IN_CODE_compiler* cache; // If non-zero, points to a cached compilation of this module
 } Module;
 
 // Represents a single validation error node in a singly-linked list.
@@ -400,10 +420,11 @@ typedef struct IN_WASM_EMBEDDING
   uint64_t size; // If size is 0, data points to a null terminated UTF8 file path
   int tag; // defines the type of embedding data included, determined by the runtime. 0 is always a static library file for
            // the current platform.
+  const char* name;
   struct IN_WASM_EMBEDDING* next;
 } Embedding;
 
-enum WASM_LOG_LEVEL
+enum IN_LOG_LEVEL
 {
   LOG_NONE  = -1, // Suppress all log output no matter what
   LOG_FATAL = 0,
@@ -430,20 +451,23 @@ typedef struct IN_WASM_ENVIRONMENT
   uint64_t features;       // WASM_FEATURE_FLAGS
   uint64_t optimize;       // WASM_OPTIMIZE_FLAGS
   unsigned int maxthreads; // Max number of threads for any multithreaded action. If 0, there is no limit.
+  const char* rootpath;    // Internal buffer for storing the root directory of the EXE to help with directory searches
   const char* libpath;     // Path to look for default environment libraries
   const char* objpath; // Path to store intermediate results. If NULL, intermediate results are stored in the output folder
   const char* linker;  // If nonzero, attempts to execute this path as a linker instead of using the built-in LLD linker
   const char* system;  // prefix for the "system" module, which simply attempts to link the function name as a C function.
                        // Defaults to a blank string.
   struct IN_WASM_ALLOCATOR* alloc; // Stores a pointer to the internal allocator
-  int loglevel;                    // WASM_LOG_LEVEL
+  int loglevel;                    // IN_LOG_LEVEL
   FILE* log;                       // Output stream for log messages
   void (*wasthook)(void*);         // Optional hook for WAST debugging cases
+  const char** exports;            // Use AddCustomExport() to manage this list
+  varuint32 n_exports;
 
   struct kh_modules_s* modulemap;
   struct kh_modulepair_s* whitelist;
   struct kh_cimport_s* cimports;
-  LLVM_LLVM_CONTEXT* context;
+  LLVM_LLVM_compiler* context;
 } Environment;
 
 #ifdef __cplusplus

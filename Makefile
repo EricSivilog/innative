@@ -27,10 +27,10 @@ else
 CPPFLAGS += -DNDEBUG -O3
 endif
 
-debug: innative-env innative innative-cmd innative-test innative-stub
-all: innative-env innative innative-cmd innative-test innative-stub
+debug: innative-env innative-test-embedding innative innative-cmd innative-test innative-stub
+all: innative-env innative-test-embedding innative innative-cmd innative-test innative-stub
 
-clean: innative-env-clean innative-clean innative-cmd-clean innative-test-clean innative-stub-clean
+clean: innative-env-clean innative-test-embedding-clean innative-clean innative-cmd-clean innative-test-clean innative-stub-clean
 	#$(RM) -r $(LIBDIR)
 	#$(RM) -r $(BINDIR)
 	$(RM) -r $(OBJDIR)
@@ -45,6 +45,7 @@ dist: all
 	mkdir -p innative-posix-runtime-x64/
 	cp bin/innative.a innative-posix-runtime-x64/
 	cp bin/libinnative.so innative-posix-runtime-x64/
+	cp bin/innative-test-embedding.a innative-posix-runtime-x64/
 	cp bin/innative-env.a innative-posix-runtime-x64/
 	cp bin/innative-env-d.a innative-posix-runtime-x64/
 	cp bin/innative-cmd innative-posix-runtime-x64/
@@ -68,11 +69,11 @@ uninstall:
 	$(RM) -r $(DESTDIR)$(PREFIX)/include/innative
 	$(RM) $(DESTDIR)$(PREFIX)/lib/libinnative.so
 
-benchmarks:
-	$(CXX) innative-test/benchmark_n-body.cpp wasm_malloc.c --target=wasm32-unknown-unknown-wasm -nostdlib --optimize=3 --output /scripts/benchmark_n-body.wasm -Xlinker --no-entry -Xlinker --export-dynamic
-	$(CXX) innative-test/benchmark_fac.cpp wasm_malloc.c --target=wasm32-unknown-unknown-wasm -nostdlib --optimize=3 --output /scripts/benchmark_fac.wasm -Xlinker --no-entry -Xlinker --export-dynamic
-	$(CXX) innative-test/benchmark_fannkuch-redux.cpp wasm_malloc.c --target=wasm32-unknown-unknown-wasm -nostdlib --optimize=3 --output /scripts/benchmark_fannkuch-redux.wasm -Xlinker --no-entry -Xlinker --export-dynamic
+benchmarks: benchmark_n-body.wasm benchmark_fib.wasm benchmark_fannkuch-redux.wasm debugging.wasm funcreplace.wasm
 
+%.wasm: innative-test/%.cpp
+	$(CC) $< -g -o scripts/$@ wasm_malloc.c --target=wasm32-unknown-unknown-wasm -nostdlib --optimize=3 -Xlinker --no-entry -Xlinker --export-dynamic
+  
 .PHONY: all clean install uninstall benchmarks debug
 
 include innative-env/Makefile
@@ -80,3 +81,4 @@ include innative/Makefile
 include innative-cmd/Makefile
 include innative-test/Makefile
 include innative-stub/Makefile
+include innative-test-embedding/Makefile

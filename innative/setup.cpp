@@ -1,7 +1,7 @@
-// Copyright (c)2019 Black Sphere Studios
+// Copyright (c)2020 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#include "util.h"
+#include "utility.h"
 #include "innative/export.h"
 #include <assert.h>
 #include <stdexcept>
@@ -9,31 +9,32 @@
 #include <algorithm>
 
 #ifdef IN_PLATFORM_WIN32
-#include "../innative/win32.h"
-#include <intrin.h>
+  #include "../innative/win32.h"
+  #include <intrin.h>
 #elif defined(IN_PLATFORM_POSIX)
-#include <unistd.h>
-#include <cpuid.h>
-#include <limits.h>
-#include <dlfcn.h>
-#include <sys/mman.h>
-#include <dirent.h>
-#include <fstream>
-#include <sys/stat.h>
+  #include <unistd.h>
+  #include <cpuid.h>
+  #include <limits.h>
+  #include <dlfcn.h>
+  #include <sys/mman.h>
+  #include <dirent.h>
+  #include <fstream>
+  #include <sys/stat.h>
 #else
-#error unknown platform
+  #error unknown platform
 #endif
 
 namespace innative {
   namespace utility {
 #ifdef IN_PLATFORM_WIN32
-#define MAKEWSTRING2(x) L#x
-#define MAKEWSTRING(x) MAKEWSTRING2(x)
-#define IN_VERSION_PATH \
-  MAKEWSTRING(INNATIVE_VERSION_MAJOR) L"\\" MAKEWSTRING(INNATIVE_VERSION_MINOR) L"\\" MAKEWSTRING(INNATIVE_VERSION_REVISION)
-#define IN_WIN32_APPS L"SOFTWARE\\Classes\\Applications\\"
-#define IN_WIN32_CLASSPATH IN_WIN32_APPS L"innative-cmd.exe"
-#define IN_WIN32_CLSID L"25A4AE98-4F30-4735-B29B-37B6EDC5A9E9"
+  #define MAKEWSTRING2(x) L#x
+  #define MAKEWSTRING(x)  MAKEWSTRING2(x)
+  #define IN_VERSION_PATH               \
+    MAKEWSTRING(INNATIVE_VERSION_MAJOR) \
+    L"\\" MAKEWSTRING(INNATIVE_VERSION_MINOR) L"\\" MAKEWSTRING(INNATIVE_VERSION_REVISION)
+  #define IN_WIN32_APPS      L"SOFTWARE\\Classes\\Applications\\"
+  #define IN_WIN32_CLASSPATH IN_WIN32_APPS L"innative-cmd.exe"
+  #define IN_WIN32_CLSID     L"25A4AE98-4F30-4735-B29B-37B6EDC5A9E9"
 
     bool Win32SetKey(HKEY hive, const wchar_t* key, const wchar_t* value, const wchar_t* data)
     {
@@ -171,8 +172,8 @@ namespace innative {
     };
 
 #elif defined(IN_PLATFORM_POSIX)
-#define POSIX_VERSION_STR \
-  "." MAKESTRING(INNATIVE_VERSION_MAJOR) "." MAKESTRING(INNATIVE_VERSION_MINOR) "." MAKESTRING(INNATIVE_VERSION_REVISION)
+  #define POSIX_VERSION_STR \
+    "." MAKESTRING(INNATIVE_VERSION_MAJOR) "." MAKESTRING(INNATIVE_VERSION_MINOR) "." MAKESTRING(INNATIVE_VERSION_REVISION)
     int FindLatestVersion(const std::string& prefix, const std::vector<std::string>& files)
     {
       int v = -1;

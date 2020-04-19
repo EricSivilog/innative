@@ -1,11 +1,11 @@
-// Copyright (c)2019 Black Sphere Studios
+// Copyright (c)2020 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #ifndef IN__LEXER_H
 #define IN__LEXER_H
 
 #include "innative/schema.h"
-#include "util.h"
+#include "utility.h"
 #include "queue.h"
 
 namespace innative {
@@ -67,6 +67,7 @@ namespace innative {
     RANGE_ERROR,
     INTEGER, // Explicit integer/float are only used as a shortcut when generating token lists
     FLOAT,
+    DEBUG_INFO, // only used in the serializer
     TOTALCOUNT,
   };
 

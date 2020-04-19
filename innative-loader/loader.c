@@ -1,15 +1,15 @@
-// Copyright (c)2019 Black Sphere Studios
+// Copyright (c)2020 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include "innative/export.h"
 #include <stdio.h>
 
 #ifdef IN_PLATFORM_WIN32
-#include "../innative/win32.h"
+  #include "../innative/win32.h"
 
 struct WinPass
 {
-  IRExports* exports;
+  INExports* exports;
   Environment* env;
   int* err;
 };
@@ -42,7 +42,7 @@ BOOL CALLBACK EnumHandler(__in_opt HMODULE hModule, __in LPCSTR lpType, __in LPS
 
 void EnumEnvironmentHandler(struct WinPass* pass, uint8_t* data, DWORD sz, const char* name)
 {
-  *pass->err = (*pass->exports->AddEmbedding)(pass->env, atoi(name), data, sz);
+  *pass->err = (*pass->exports->AddEmbedding)(pass->env, atoi(name), data, sz, 0);
 }
 
 void EnumModuleHandler(struct WinPass* pass, uint8_t* data, DWORD sz, const char* name)
@@ -91,9 +91,9 @@ BOOL CALLBACK EnumFlags(__in_opt HMODULE hModule, __in LPCSTR lpType, __in LPSTR
 }
 
 #elif defined(IN_PLATFORM_POSIX)
-#error TODO
+  #error TODO
 #else
-#error unknown platform!
+  #error unknown platform!
 #endif
 
 // This is a generic cross-platform WASM runtime loader. It uses the runtime stub
@@ -102,7 +102,7 @@ int main(int argc, char** argv)
 {
   // First we load the runtime using whatever runtime function was linked.
   // This will either be an embedded runtime, or a stub function that dynamically loads a DLL.
-  IRExports exports;
+  INExports exports;
   innative_runtime(&exports);
   unsigned int maxthreads = 0;
   void* assembly          = (*exports.LoadAssembly)("out.cache");
@@ -148,7 +148,7 @@ int main(int argc, char** argv)
       }
     }
 #elif defined(IN_PLATFORM_POSIX)
-#error TODO
+  #error TODO
 #endif
     env->flags |= ENV_NO_INIT | ENV_LIBRARY;
 
@@ -164,7 +164,7 @@ int main(int argc, char** argv)
       }
     }
 #elif defined(IN_PLATFORM_POSIX)
-#error TODO
+  #error TODO
 #endif
 
     if(err < 0)
@@ -187,7 +187,7 @@ int main(int argc, char** argv)
       }
     }
 #elif defined(IN_PLATFORM_POSIX)
-#error TODO
+  #error TODO
 #endif
 
     // Add the whitelist values, the resource name being the module and the data being the function
@@ -202,7 +202,7 @@ int main(int argc, char** argv)
       }
     }
 #elif defined(IN_PLATFORM_POSIX)
-#error TODO
+  #error TODO
 #endif
 
     // Ensure all modules are loaded, in case we have multithreading enabled

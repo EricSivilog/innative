@@ -1,4 +1,4 @@
-// Copyright (c)2019 Black Sphere Studios
+// Copyright (c)2020 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include "benchmark.h"
@@ -71,16 +71,7 @@ int main(int argc, char* argv[])
       stages = TEST_WASM_CORE;
   }
 
-#ifdef IN_DYNAMIC_LINK
-  if(stages & TEST_WASM_CORE)
-  {
-    stages &= (~TEST_WASM_CORE);
-    std::cout << "Skipping webassembly tests because this EXE is dynamically linked to the runtime DLL!" << std::endl;
-    std::cout << "Signal capture and error recovery only works properly when statically linked.\n" << std::endl;
-  }
-#endif
-
-  IRExports exports;
+  INExports exports;
   innative_runtime(&exports);
 
   if(stages & TEST_INTERNAL)
@@ -144,9 +135,9 @@ int main(int argc, char* argv[])
         fflush(stdout);
       };
 
-      int err = (*exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0);
+      int err = (*exports.AddEmbedding)(env, 0, INNATIVE_DEFAULT_ENVIRONMENT, 0, 0);
       if(err >= 0)
-        err = (*exports.CompileScript)(reinterpret_cast<const uint8_t*>(testenv), sizeof(testenv), env, false,
+        err = (*exports.CompileScript)(reinterpret_cast<const uint8_t*>(testenv), sizeof(testenv) - 1, env, false,
                                        temppath.c_str());
 
       if(err < 0)
@@ -158,7 +149,8 @@ int main(int argc, char* argv[])
 
       FPRINTF(env->log, "%s: .", file.generic_u8string().c_str());
       fflush(env->log);
-      err = (*exports.CompileScript)((const uint8_t*)file.generic_u8string().data(), 0, env, true, temppath.c_str());
+      err = (*exports.CompileScript)(reinterpret_cast<const uint8_t*>(file.generic_u8string().data()), 0, env, true,
+                                     temppath.c_str());
 
       if(!err && !env->errors)
         fputs("SUCCESS\n", env->log);

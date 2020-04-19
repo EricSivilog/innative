@@ -1,4 +1,4 @@
-// Copyright (c)2019 Black Sphere Studios
+// Copyright (c)2020 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #ifndef IN__UTIL_H
@@ -14,14 +14,7 @@
 #include <memory>
 #include <atomic>
 #include <vector>
-
-#if defined(IN_COMPILER_GCC) && __GNUC__ < 8
-#include <experimental/filesystem>
-using namespace std::experimental::filesystem;
-#else
-#include <filesystem>
-using namespace std::filesystem;
-#endif
+#include "../innative/filesys.h"
 
 struct IN_WASM_ALLOCATOR
 {
@@ -47,18 +40,20 @@ namespace innative {
     typedef unsigned int uintcpuinfo[5];
 #endif
 
-    struct StringRef
+    struct StringSpan
     {
       const char* s;
       size_t len;
 
-      static StringRef From(const ByteArray& b) { return StringRef{ b.str(), b.size() }; }
-      static StringRef From(const char* s) { return StringRef{ s, !s ? 0 : strlen(s) }; }
+      static StringSpan From(const ByteArray& b) { return StringSpan{ b.str(), b.size() }; }
+      static StringSpan From(const char* s) { return StringSpan{ s, !s ? 0 : strlen(s) }; }
 
-      bool operator==(const StringRef& r) const
+      bool operator==(const StringSpan& r) const
       {
         if(len != r.len)
           return false;
+        if(!len)
+          return true;
         return !memcmp(s, r.s, len);
       }
     };
@@ -98,7 +93,7 @@ namespace innative {
       FlipEndian(reinterpret_cast<uint8_t*>(target), sizeof(T));
     }
 
-    inline khint_t __ac_X31_hash_stringrefins(utility::StringRef ref)
+    inline khint_t __ac_X31_hash_stringrefins(utility::StringSpan ref)
     {
       const char* s   = ref.s;
       const char* end = ref.s + ref.len;
@@ -111,7 +106,7 @@ namespace innative {
 
     inline khint_t __ac_X31_hash_bytearray(const ByteArray& id)
     {
-      const char* s   = (const char*)id.get();
+      const char* s   = reinterpret_cast<const char*>(id.get());
       const char* end = s + id.size();
       khint_t h       = 0;
       if(s < end)
@@ -203,7 +198,7 @@ namespace innative {
       return (m.knownsections & (1 << opcode)) != 0;
     }
 
-    uint8_t GetInstruction(StringRef s);
+    uint8_t GetInstruction(StringSpan s);
     varuint32 ModuleFunctionType(const Module& m, varuint32 index);
     FunctionType* ModuleFunction(const Module& m, varuint32 index);
     TableDesc* ModuleTable(const Module& m, varuint32 index);
@@ -223,16 +218,19 @@ namespace innative {
     void FreeDLL(void* dll);
     int Install(const char* arg0, bool full);
     int Uninstall();
-    bool RestoreStackGuard(void* lpPage);
+    IN_COMPILER_DLLEXPORT int AddCImport(const Environment& env, const char* id);
     const char* AllocString(Environment& env, const char* s, size_t n);
-    IN_FORCEINLINE const char* AllocString(Environment& env, const char* s) { return AllocString(env, s, strlen(s)); }
+    IN_FORCEINLINE const char* AllocString(Environment& env, const char* s)
+    {
+      return !s ? nullptr : AllocString(env, s, strlen(s));
+    }
     IN_FORCEINLINE const char* AllocString(Environment& env, const std::string& s)
     {
       return AllocString(env, s.data(), s.size());
     }
 
     // Creates a C-compatible mangled name with an optional index
-    inline std::string CanonicalName(StringRef prefix, StringRef name, int index = -1)
+    inline std::string CanonicalName(StringSpan prefix, StringSpan name, int index = -1)
     {
       static const char HEX[17] = "0123456789ABCDEF";
 
@@ -288,51 +286,86 @@ namespace innative {
     // Generates the correct mangled C function name
     inline std::string CanonImportName(const Import& imp, const char* system)
     {
-      if(IsSystemImport(imp.module_name, system)) // system module imports are always raw function names
-        return CanonicalName(StringRef{ 0, 0 }, StringRef::From(imp.export_name));
-      return CanonicalName(StringRef::From(imp.module_name), StringRef::From(imp.export_name));
+      if(imp.ignore ||
+         (IsSystemImport(imp.module_name, system) && !imp.alternate)) // system module imports are always raw function names
+        return CanonicalName(StringSpan{ 0, 0 }, StringSpan::From(imp.export_name));
+      return CanonicalName(StringSpan::From(imp.module_name), StringSpan::From(imp.export_name));
     }
 
     // Generates a whitelist string for a module and export name, which includes calling convention information
-    inline size_t CanonWhitelist(const void* module_name, const void* export_name, char* out)
+    inline size_t CanonWhitelist(const void* module_name, const void* export_name, const char* system, char* out)
     {
-      if(!module_name)
+      if(!module_name ||
+         !strcmp(reinterpret_cast<const char*>(module_name), system)) // system name is normalized to an empty module name
         module_name = "";
-      size_t module_len = strlen((const char*)module_name);
-      const char* call  = strchr((const char*)module_name, '!');
+      size_t module_len = strlen(reinterpret_cast<const char*>(module_name));
+      const char* call  = strchr(reinterpret_cast<const char*>(module_name), '!');
       if(call && !strcmp(call, "!C")) // !C is the same as having no calling convention, so we remove it
         module_len -= 2;
 
-      size_t export_len = strlen((const char*)export_name) + 1;
+      size_t export_len = strlen(reinterpret_cast<const char*>(export_name)) + 1;
       if(out)
       {
-        tmemcpy<char>(out, module_len + 1 + export_len, (const char*)module_name, module_len);
+        tmemcpy<char>(out, module_len + 1 + export_len, reinterpret_cast<const char*>(module_name), module_len);
         out[module_len] = 0;
-        tmemcpy<char>(out + module_len + 1, export_len, (const char*)export_name, export_len);
+        tmemcpy<char>(out + module_len + 1, export_len, reinterpret_cast<const char*>(export_name), export_len);
       }
       return module_len + export_len + 1;
     }
-    IN_FORCEINLINE std::string CanonWhitelist(const void* module_name, const void* export_name)
+    IN_FORCEINLINE std::string CanonWhitelist(const void* module_name, const void* export_name, const char* system)
     {
       std::string s;
-      s.resize(CanonWhitelist(module_name, export_name, nullptr));
-      CanonWhitelist(module_name, export_name, const_cast<char*>(s.data()));
+      s.resize(CanonWhitelist(module_name, export_name, system, nullptr));
+      CanonWhitelist(module_name, export_name, system, const_cast<char*>(s.data()));
       return s;
     }
 
-    inline std::unique_ptr<uint8_t[]> LoadFile(const path& file, long& sz)
+    inline std::unique_ptr<uint8_t[]> LoadFile(const path& file, size_t& sz)
     {
       FILE* f = nullptr;
       FOPEN(f, file.c_str(), "rb");
       if(!f)
         return nullptr;
       fseek(f, 0, SEEK_END);
-      sz = ftell(f);
+      long pos = ftell(f);
+      if(pos < 0)
+      {
+        fclose(f);
+        return nullptr;
+      }
+      sz = static_cast<size_t>(pos);
       fseek(f, 0, SEEK_SET);
       std::unique_ptr<uint8_t[]> data(new uint8_t[sz]);
-      sz = (long)fread(data.get(), 1, sz, f);
+      sz = fread(data.get(), 1, sz, f);
       fclose(f);
       return data;
+    }
+
+    inline bool DumpFile(const path& file, const void* data, size_t sz)
+    {
+      FILE* f = nullptr;
+      FOPEN(f, file.c_str(), "wb");
+      if(!f)
+        return false;
+      if(fwrite(data, 1, sz, f) != sz)
+        return false;
+      return !fclose(f);
+    }
+
+    template<class T> inline static IN_ERROR ReallocArray(const Environment& env, T*& a, varuint32& n)
+    {
+      // We only allocate power of two chunks from our greedy allocator
+      varuint32 i = NextPow2(n++);
+      if(n <= 2 || n == i)
+      {
+        T* old = a;
+        if(!(a = tmalloc<T>(env, n * 2)))
+          return ERR_FATAL_OUT_OF_MEMORY;
+        if(old != nullptr)
+          tmemcpy<T>(a, n * 2, old, n - 1); // Don't free old because it was from a greedy allocator.
+      }
+
+      return ERR_SUCCESS;
     }
   }
 }

@@ -1,23 +1,9 @@
-// Copyright (c)2019 Black Sphere Studios
+// Copyright (c)2020 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
+#include "llvm.h"
 #include "innative/export.h"
-#include "util.h"
-#pragma warning(push)
-#pragma warning(disable : 4146 4267 4141 4244 4624)
-#define _SCL_SECURE_NO_WARNINGS
-#include "llvm/IR/LLVMContext.h"
-#include "llvm/IR/Module.h"
-#include "llvm/IR/Type.h"
-#include "llvm/Target/TargetMachine.h"
-#include "llvm/Support/TargetSelect.h"
-#include "llvm/Support/TargetRegistry.h"
-#include "llvm/IRReader/IRReader.h"
-#include "llvm/Support/SourceMgr.h"
-#include "llvm/Linker/Linker.h"
-#include "llvm/IR/LegacyPassManager.h"
-#include "lld/Common/Driver.h"
-#pragma warning(pop)
+#include "utility.h"
 #include <fstream>
 
 using namespace innative;
@@ -26,7 +12,7 @@ using namespace innative;
 int innative_compile_llvm(const char** files, size_t n, int flags, const char* out, FILE* log)
 {
   // Construct the LLVM environment and current working directories
-  llvm::LLVMContext llvm_context;
+  llvm::LLVMContext llvm_compiler;
 
   bool has_start = false;
   IN_ERROR err   = ERR_SUCCESS;
@@ -54,7 +40,7 @@ int innative_compile_llvm(const char** files, size_t n, int flags, const char* o
 
   // We link everything into one giant module, because wasm currently doesn't work well with multiple modules
   llvm::SMDiagnostic diag;
-  auto composite = new llvm::Module("wasm-output", llvm_context);
+  auto composite = new llvm::Module("wasm-output", llvm_compiler);
   composite->setTargetTriple(machine->getTargetTriple().getTriple());
   llvm::Linker link(*composite);
 
@@ -67,7 +53,7 @@ int innative_compile_llvm(const char** files, size_t n, int flags, const char* o
       return ERR_FATAL_FILE_ERROR;
     }
 
-    if(link.linkInModule(llvm::parseIRFile(files[i], diag, llvm_context)))
+    if(link.linkInModule(llvm::parseIRFile(files[i], diag, llvm_compiler)))
     {
       fputs("Failed to link module: ", log);
       fputs(files[0], log);

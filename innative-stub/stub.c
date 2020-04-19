@@ -1,10 +1,10 @@
-// Copyright (c)2019 Black Sphere Studios
+// Copyright (c)2020 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include "innative/export.h"
 
 #ifdef IN_PLATFORM_WIN32
-#include "../innative/win32.h"
+  #include "../innative/win32.h"
 
 const wchar_t* GetRegString(wchar_t* buf, size_t sz, int major, int minor, int revision)
 {
@@ -77,15 +77,15 @@ bool EnumKeyValue(HKEY hive, const wchar_t* key, uint16_t* version)
   return true;
 }
 #elif defined(IN_PLATFORM_POSIX)
-#define MAKESTRING2(x) #x
-#define MAKESTRING(x) MAKESTRING2(x)
+  #define MAKESTRING2(x) #x
+  #define MAKESTRING(x)  MAKESTRING2(x)
 
-#include <dlfcn.h>
+  #include <dlfcn.h>
 #endif
 
 // This is a stub loader for the runtime. It looks for an existing installation
 // of the runtime on the OS that is equal to or newer than the compiled version.
-IN_COMPILER_DLLEXPORT extern void innative_runtime(IRExports* exports)
+IN_COMPILER_DLLEXPORT extern void innative_runtime(INExports* exports)
 {
 #ifdef IN_PLATFORM_WIN32
   // On windows, we use the registry to store versions, with a key set to the DLL path of the runtime.
@@ -135,7 +135,7 @@ IN_COMPILER_DLLEXPORT extern void innative_runtime(IRExports* exports)
     HMODULE dll = LoadLibraryW(runtime);
     if(dll != NULL)
     {
-      void (*hook)(IRExports*) = (void (*)(IRExports*))GetProcAddress((HMODULE)dll, "innative_runtime");
+      void (*hook)(INExports*) = (void (*)(INExports*))GetProcAddress((HMODULE)dll, "innative_runtime");
       if(hook)
         (*hook)(exports);
       else
@@ -160,13 +160,13 @@ IN_COMPILER_DLLEXPORT extern void innative_runtime(IRExports* exports)
 
   if(lib != NULL)
   {
-    void (*hook)(IRExports*) = (void (*)(IRExports*))dlsym(lib, "innative_runtime");
+    void (*hook)(INExports*) = (void (*)(INExports*))dlsym(lib, "innative_runtime");
     if(hook)
       (*hook)(exports);
     else
       dlclose(lib);
   }
 #else
-#error Unknown platform!
+  #error Unknown platform!
 #endif
 }

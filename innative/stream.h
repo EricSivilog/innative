@@ -1,4 +1,4 @@
-// Copyright (c)2019 Black Sphere Studios
+// Copyright (c)2020 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #ifndef IN__STREAM_H
@@ -10,11 +10,11 @@
 
 namespace innative {
   namespace utility {
-    // We just read the entire payload into memory, so this re-implements trivial stream operations without C++ stream
+    // We read the entire payload into memory, so this re-implements trivial stream operations without C++ stream
     // overhead
     struct Stream
     {
-      uint8_t* data;
+      const uint8_t* data;
       size_t size;
       size_t pos;
 

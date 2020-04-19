@@ -1,14 +1,11 @@
-// Copyright (c)2019 Black Sphere Studios
+// Copyright (c)2020 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include "benchmark.h"
 #include <chrono>
 
-Benchmarks::Benchmarks(const IRExports& exports, const char* arg0, int loglevel, const path& folder) :
-  _exports(exports),
-  _arg0(arg0),
-  _loglevel(loglevel),
-  _folder(folder)
+Benchmarks::Benchmarks(const INExports& exports, const char* arg0, int loglevel, const path& folder) :
+  _exports(exports), _arg0(arg0), _loglevel(loglevel), _folder(folder)
 {}
 Benchmarks::~Benchmarks()
 {
@@ -25,16 +22,15 @@ void Benchmarks::Run(FILE* out)
   fprintf(out, "%-*s %-*s %-*s %-*s %-*s %-*s\n", COLUMNS[0], "---------", COLUMNS[1], "-----", COLUMNS[2], "-----",
           COLUMNS[3], "------", COLUMNS[4], "-------", COLUMNS[5], "------");
 
-  DoBenchmark<int64_t, int64_t>(out, "../scripts/benchmark-fac.wat", "fac", COLUMNS, &Benchmarks::fac, 37);
   DoBenchmark<int, int>(out, "../scripts/benchmark_n-body.wasm", "nbody", COLUMNS, &Benchmarks::nbody, 11);
+  DoBenchmark<int64_t, int64_t>(out, "../scripts/benchmark_fib.wasm", "fib", COLUMNS, &Benchmarks::fib, 37);
   DoBenchmark<int, int>(out, "../scripts/benchmark_fannkuch-redux.wasm", "fannkuch_redux", COLUMNS,
                         &Benchmarks::fannkuch_redux, 11);
 }
 
-void* Benchmarks::LoadWASM(const char* wasm, int flags, int optimize)
+void* Benchmarks::LoadWASM(const path& wasm, const char* name, int flags, int optimize)
 {
-  static int counter =
-    0; // We must gaurantee all file names are unique because windows basically never unloads DLLs properly
+  static int counter = 0; // We must gaurantee all file names are unique because windows never unloads DLLs properly
   ++counter;
   Environment* env = (*_exports.CreateEnvironment)(1, 0, _arg0);
   if(!env)
@@ -46,7 +42,7 @@ void* Benchmarks::LoadWASM(const char* wasm, int flags, int optimize)
   env->log      = stdout;
   env->loglevel = _loglevel;
 
-  int err = (*_exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0);
+  int err = (*_exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0, 0);
 
   if(err < 0)
   {
@@ -54,7 +50,7 @@ void* Benchmarks::LoadWASM(const char* wasm, int flags, int optimize)
     return 0;
   }
 
-  (*_exports.AddModule)(env, wasm, 0, wasm, &err);
+  (*_exports.AddModule)(env, wasm.u8string().c_str(), 0, name, &err);
   if(err < 0)
   {
     (*_exports.DestroyEnvironment)(env);
@@ -62,7 +58,7 @@ void* Benchmarks::LoadWASM(const char* wasm, int flags, int optimize)
   }
 
   (*_exports.FinalizeEnvironment)(env);
-  path base = _folder / u8path(wasm).stem();
+  path base = _folder / wasm.stem();
   base += std::to_string(counter);
   path out = base;
   out.replace_extension(IN_LIBRARY_EXTENSION);

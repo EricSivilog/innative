@@ -1,0 +1,28 @@
+language: cpp
+sudo: required
+dist: xenial
+git:
+  submodules: false
+before_install:
+  - git submodule update --init spec
+os:
+  - linux
+compiler:
+  - gcc
+  - clang
+env:
+  matrix:
+  #- CHECK_CLANG_FORMAT=1 # clang_format currently disagrees with visual studio
+  - LLVM_CONFIG=llvm-config-9 CLANG=clang-9
+  - LLVM_CONFIG=llvm-config-9 CLANG=clang-9
+
+matrix:
+  exclude:
+    # Only need one copy of this test.
+    - os: linux
+      compiler: clang
+      env: CHECK_CLANG_FORMAT=1
+
+script:
+  - ./travis.sh
+

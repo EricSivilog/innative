@@ -1,8 +1,8 @@
-// Copyright (c)2019 Black Sphere Studios
+// Copyright (c)2020 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include "test.h"
-#include "../innative/util.h"
+#include "../innative/utility.h"
 #include <functional>
 
 using namespace innative;
@@ -10,9 +10,12 @@ using namespace utility;
 
 void TestHarness::test_util()
 {
+  for(int i = 0; i < sizeof(IN_BASE64) - 1; ++i)
+    TEST(BASE64[IN_BASE64[i]] == i);
+
   {
-    StringRef a = { nullptr, 0 };
-    StringRef b = { "asdf", 4 };
+    StringSpan a = { nullptr, 0 };
+    StringSpan b = { "asdf", 4 };
     TEST(!(a == b));
     TEST(a == a);
     TEST(b == b);

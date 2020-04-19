@@ -1,4 +1,4 @@
-// Copyright (c)2019 Black Sphere Studios
+// Copyright (c)2020 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #ifndef IN__BENCHMARK_H
@@ -19,16 +19,17 @@ class Benchmarks
   };
 
 public:
-  Benchmarks(const IRExports& exports, const char* arg0, int loglevel, const path& folder);
+  Benchmarks(const INExports& exports, const char* arg0, int loglevel, const path& folder);
   ~Benchmarks();
   void Run(FILE* out);
-  static int64_t fac(int64_t n);
+  static int64_t fib(int64_t n);
   static int nbody(int n);
   static int fannkuch_redux(int n);
+  static int debug(int n);
   static int minimum(int n);
 
   template<typename R, typename... Args>
-  Timing DoBenchmark(FILE* out, const char* wasm, const char* func, const int (&COLUMNS)[6], R (*f)(Args...),
+  Timing DoBenchmark(FILE* out, const path& wasm, const char* func, const int (&COLUMNS)[6], R (*f)(Args...),
                      Args&&... args)
   {
     Timing timing;
@@ -56,10 +57,12 @@ public:
   }
 
   template<typename R, typename... Args>
-  int64_t MeasureWASM(const char* wasm, const char* func, int flags, int optimize, Args&&... args)
+  int64_t MeasureWASM(const path& wasm, const char* func, int flags, int optimize, Args&&... args)
   {
-    void* m         = LoadWASM(wasm, flags, optimize);
-    R (*f)(Args...) = (R(*)(Args...))(*_exports.LoadFunction)(m, wasm, func);
+    auto name = wasm.filename().replace_extension().string();
+    void* m   = LoadWASM(wasm, name.c_str(), flags, optimize);
+    assert(m != nullptr);
+    R (*f)(Args...) = (R(*)(Args...))(*_exports.LoadFunction)(m, name.c_str(), func);
     assert(f != nullptr);
     int64_t t = MeasureFunction(f, std::forward<Args>(args)...);
     (*_exports.FreeAssembly)(m);
@@ -74,11 +77,11 @@ public:
   }
 
 protected:
-  void* LoadWASM(const char* wasm, int flags, int optimize);
+  void* LoadWASM(const path& wasm, const char* name, int flags, int optimize);
   std::chrono::high_resolution_clock::time_point start();
   int64_t end(std::chrono::high_resolution_clock::time_point start);
 
-  const IRExports& _exports;
+  const INExports& _exports;
   const char* _arg0;
   int _loglevel;
   std::vector<path> _garbage;

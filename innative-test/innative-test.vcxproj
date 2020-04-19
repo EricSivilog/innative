@@ -125,21 +125,21 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <IntDir>$(Platform)\$(Configuration)\</IntDir>
-    <OutDir>$(SolutionDir)bin32\</OutDir>
+    <OutDir>$(SolutionDir)bin-$(Platform)\</OutDir>
     <TargetName>$(ProjectName)-d</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug Static|Win32'">
     <IntDir>$(Platform)\$(Configuration)\</IntDir>
-    <OutDir>$(SolutionDir)bin32\</OutDir>
+    <OutDir>$(SolutionDir)bin-$(Platform)\</OutDir>
     <TargetName>$(ProjectName)-s-d</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <IntDir>$(Platform)\$(Configuration)\</IntDir>
-    <OutDir>$(SolutionDir)bin32\</OutDir>
+    <OutDir>$(SolutionDir)bin-$(Platform)\</OutDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release Static|Win32'">
     <IntDir>$(Platform)\$(Configuration)\</IntDir>
-    <OutDir>$(SolutionDir)bin32\</OutDir>
+    <OutDir>$(SolutionDir)bin-$(Platform)\</OutDir>
     <TargetName>$(ProjectName)-s</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -334,20 +334,37 @@
   <ItemGroup>
     <ClCompile Include="..\wasm_malloc.c" />
     <ClCompile Include="benchmark.cpp" />
-    <ClCompile Include="benchmark_fac.cpp" />
     <ClCompile Include="benchmark_fannkuch-redux.cpp" />
+    <ClCompile Include="benchmark_fib.cpp" />
     <ClCompile Include="benchmark_n-body.cpp" />
+    <ClCompile Include="debugging.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug Static|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release Static|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug Static|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release Static|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="test.cpp" />
     <ClCompile Include="test_allocator.cpp" />
+    <ClCompile Include="test_assemblyscript.cpp" />
+    <ClCompile Include="test_debug.cpp" />
+    <ClCompile Include="test_embedding.cpp" />
     <ClCompile Include="test_environment.cpp" />
+    <ClCompile Include="test_errors.cpp" />
+    <ClCompile Include="test_funcreplace.cpp" />
     <ClCompile Include="test_harness.cpp" />
     <ClCompile Include="test_malloc.cpp" />
+    <ClCompile Include="test_manual.cpp" />
     <ClCompile Include="test_parallel_parsing.cpp" />
     <ClCompile Include="test_queue.cpp" />
     <ClCompile Include="test_serializer.cpp" />
     <ClCompile Include="test_stack.cpp" />
     <ClCompile Include="test_stream.cpp" />
     <ClCompile Include="test_util.cpp" />
+    <ClCompile Include="test_whitelist.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="benchmark.h" />
@@ -355,6 +372,13 @@
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="innative-test.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\scripts\test-h.wat" />
+    <None Include="..\scripts\test-no-op.wat" />
+    <None Include="..\scripts\test-win32-cref.wat" />
+    <None Include="..\scripts\test-win64-cref.wat" />
+    <None Include="..\scripts\test-win64.wat" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

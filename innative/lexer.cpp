@@ -1,7 +1,7 @@
-// Copyright (c)2019 Black Sphere Studios
+// Copyright (c)2020 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#include "util.h"
+#include "utility.h"
 #include "wat.h"
 #include "parse.h"
 #include "validate.h"
@@ -17,7 +17,7 @@ using namespace wat;
 
 namespace innative {
   namespace wat {
-    KHASH_INIT(tokens, StringRef, WatTokens, 1, internal::__ac_X31_hash_stringrefins, kh_int_hash_equal);
+    KHASH_INIT(tokens, StringSpan, WatTokens, 1, internal::__ac_X31_hash_stringrefins, kh_int_hash_equal);
 
     template<int LEN>
     inline kh_tokens_t* GenTokenHash(const char* (&list)[LEN],
@@ -29,20 +29,20 @@ namespace innative {
       int r;
       for(int i = 0; i < LEN; ++i)
       {
-        auto iter       = kh_put_tokens(h, StringRef{ list[i], strlen(list[i]) }, &r);
+        auto iter       = kh_put_tokens(h, StringSpan{ list[i], strlen(list[i]) }, &r);
         kh_val(h, iter) = WatTokens(count++);
       }
 
       for(auto& e : legacy)
       {
-        auto iter       = kh_put_tokens(h, StringRef{ e.first, strlen(e.first) }, &r);
+        auto iter       = kh_put_tokens(h, StringSpan{ e.first, strlen(e.first) }, &r);
         kh_val(h, iter) = e.second;
       }
 
       return h;
     }
 
-    static const char* tokenlist[]      = { "[NONE]",
+    static const char* tokenlist[] = { "[NONE]",
                                        "(",
                                        ")",
                                        "module",
@@ -90,14 +90,16 @@ namespace innative {
                                        "script",
                                        "input",
                                        "output" };
+
     static const kh_tokens_t* tokenhash = GenTokenHash(tokenlist, { { "anyfunc", WatTokens::FUNCREF } });
 
-    template<int LEN> inline const char* IN_getTokenString(WatTokens token, const char* (&list)[LEN])
+    const char* GetTokenString(WatTokens token)
     {
-      return ((token != WatTokens::NONE) && ((int)token < LEN)) ? list[(int)token] : 0;
+      constexpr int len = sizeof(tokenlist) / sizeof(decltype(tokenlist[0]));
+      return ((token != WatTokens::NONE) && (static_cast<decltype(len)>(token) < len)) ?
+               tokenlist[static_cast<decltype(len)>(token)] :
+               0;
     }
-
-    const char* GetTokenString(WatTokens token) { return IN_getTokenString(token, tokenlist); }
 
     const char* CheckTokenINF(const char* s, const char* end, std::string* target)
     {
@@ -166,7 +168,7 @@ namespace innative {
                            Args... args)
     {
       numbuf.clear();
-      int length             = token.len;
+      size_t length          = token.len;
       int (*digitcheck)(int) = (token.len > 2 && token.pos[0] == '0' && token.pos[1] == 'x') ? &isxdigit : &isdigit;
       for(size_t i = 0; i < token.len; ++i)
       {
@@ -233,7 +235,7 @@ namespace innative {
         {
           uint32_t i;
           float f;
-        } u = { 0x7F800000U | mantissa };
+        } u = { 0x7F800000U | (uint32_t)mantissa };
         if(token.pos[0] == '-')
           u.i |= 0x80000000U;
 
@@ -336,7 +338,7 @@ namespace innative {
 
 void innative::TokenizeWAT(Queue<WatToken>& tokens, const char* s, const char* end)
 {
-  unsigned int line   = 0;
+  unsigned int line   = 1;
   unsigned int column = 0;
   while(s < end)
   {
@@ -497,7 +499,7 @@ void innative::TokenizeWAT(Queue<WatToken>& tokens, const char* s, const char* e
         if(last >= end || !isxdigit(last[0]))
         {
           tokens.Push(WatToken{ WatTokens::NONE, s, line, column, last - s });
-          column += last - s;
+          column += (uint32_t)(last - s);
           s = last;
           break;
         }
@@ -505,7 +507,7 @@ void innative::TokenizeWAT(Queue<WatToken>& tokens, const char* s, const char* e
           ++last;
       }
       tokens.Push(WatToken{ WatTokens::NUMBER, s, line, column, last - s });
-      column += last - s;
+      column += (uint32_t)(last - s);
       s = last;
       break;
     }
@@ -515,7 +517,7 @@ void innative::TokenizeWAT(Queue<WatToken>& tokens, const char* s, const char* e
       if((begin = CheckTokenNAN(s, end, 0)) != 0 || (begin = CheckTokenINF(s, end, 0)) != 0) // Check if this is an NaN
       {
         tokens.Push(WatToken{ WatTokens::NUMBER, s, line, column, begin - s });
-        column += begin - s;
+        column += (uint32_t)(begin - s);
         s = begin;
       }
       else
@@ -526,8 +528,8 @@ void innative::TokenizeWAT(Queue<WatToken>& tokens, const char* s, const char* e
               s[0] != ')' && s[0] != '(' && s[0] != ';')
           IncToken(s, end, line, column);
 
-        StringRef ref = { begin, static_cast<size_t>(s - begin) };
-        khiter_t iter = kh_get_tokens(tokenhash, ref);
+        StringSpan ref = { begin, static_cast<size_t>(s - begin) };
+        khiter_t iter  = kh_get_tokens(tokenhash, ref);
         if(kh_exist2(tokenhash, iter))
           tokens.Push(WatToken{ kh_val(tokenhash, iter), begin, line, column });
         else

@@ -1,4 +1,4 @@
-// Copyright (c)2019 Black Sphere Studios
+// Copyright (c)2020 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #ifndef IN__STACK_H
@@ -54,6 +54,7 @@ namespace innative {
     inline size_t Capacity() const { return _capacity; }
     inline size_t Size() const { return _size - _limit; }
     inline size_t Limit() const { return _limit; }
+    inline T* Get() const { return _array; }
     inline void SetLimit(size_t limit)
     {
       assert(limit <= _size);

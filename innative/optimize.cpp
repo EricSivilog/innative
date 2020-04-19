@@ -1,7 +1,9 @@
-// Copyright (c)2019 Black Sphere Studios
+// Copyright (c)2020 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
+#include "llvm.h"
 #include "optimize.h"
+#include "compile.h"
 #pragma warning(push)
 #pragma warning(disable : 4146 4267 4141 4244 4624)
 #define _SCL_SECURE_NO_WARNINGS
@@ -77,7 +79,7 @@ IN_ERROR innative::OptimizeModules(const Environment* env)
 
   // Optimize all modules
   for(size_t i = 0; i < env->n_modules; ++i)
-    modulePassManager.run(*env->modules[i].cache->llvm, moduleAnalysisManager);
+    modulePassManager.run(*env->modules[i].cache->mod, moduleAnalysisManager);
 
   /*{
     auto manager = llvm::make_unique<llvm::legacy::FunctionPassManager>(context[i].llvm);

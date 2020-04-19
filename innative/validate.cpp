@@ -1,19 +1,14 @@
-// Copyright (c)2019 Black Sphere Studios
+// Copyright (c)2020 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include "validate.h"
-#include "util.h"
+#include "utility.h"
 #include "stack.h"
-#include "compile.h"
+#include "link.h"
 #include <stdio.h>
 #include <stdarg.h>
 #include <atomic>
 #include <limits>
-
-#define str_pair_hash_equal(a, b) (strcmp(a, b) == 0) && (strcmp(strchr(a, 0) + 1, strchr(a, 0) + 1) == 0)
-
-__KHASH_IMPL(modulepair, , kh_cstr_t, FunctionType, 1, innative::internal::__ac_X31_hash_string_pair, str_pair_hash_equal);
-__KHASH_IMPL(cimport, , Identifier, char, 0, innative::internal::__ac_X31_hash_bytearray, kh_int_hash_equal);
 
 using namespace innative;
 using namespace utility;
@@ -123,7 +118,7 @@ void innative::AppendError(const Environment& env, ValidationError*& errors, Mod
   err->error[len] = 0;
   err->code       = code;
   err->m          = -1;
-  if(m >= env.modules && (m - env.modules) < env.n_modules)
+  if(m >= env.modules && size_t(m - env.modules) < env.n_modules)
     err->m = m - env.modules;
 
   do
@@ -173,27 +168,32 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
   if(!ValidateIdentifier(imp.export_name))
     AppendError(env, env.errors, m, ERR_INVALID_UTF8_ENCODING, "Identifier not valid UTF8: %s", imp.export_name.str());
 
-  khint_t iter = kh_get_modules(
+  imp.alternate = false;
+  khint_t iter  = kh_get_modules(
     env.modulemap,
     imp.module_name); // WASM modules do not understand !CALL convention appendings, so we use the full name no matter what
   if(iter == kh_end(env.modulemap))
   {
     if(env.cimports)
     {
-      std::string name    = CanonImportName(imp, env.system);
-      khiter_t iterimport = kh_get_cimport(env.cimports, Identifier((uint8_t*)name.c_str(), (varuint32)name.size()));
+    RESTART_IMPORT_CHECK:
+      std::string name    = ABIMangle(CanonImportName(imp, env.system), CURRENT_ABI, GetCallingConvention(imp),
+                                   !m ? 0 : GetParameterBytes(*m, imp));
+      khiter_t iterimport = kh_get_cimport(env.cimports, ByteArray::Identifier(name.c_str(), name.size()));
       if(kh_exist2(env.cimports, iterimport))
       {
+        imp.ignore = kh_value(env.cimports, iterimport); // if true, this is a fake symbol
+
         if(env.flags & ENV_WHITELIST)
         {
-          khiter_t itermodule =
-            kh_get_modulepair(env.whitelist,
-                              CanonWhitelist(imp.module_name.str(), "").c_str()); // Check for a wildcard match first
+          khiter_t itermodule = kh_get_modulepair(
+            env.whitelist,
+            CanonWhitelist(imp.module_name.str(), "", env.system).c_str()); // Check for a wildcard match first
           if(!kh_exist2(env.whitelist, itermodule))
           {
             khiter_t iterexport = kh_get_modulepair(
               env.whitelist,
-              CanonWhitelist(imp.module_name.str(), imp.export_name.str())
+              CanonWhitelist(imp.module_name.str(), imp.export_name.str(), env.system)
                 .c_str()); // We already canonized the whitelist imports to eliminate unnecessary !C specifiers
             if(!kh_exist2(env.whitelist, iterexport))
               return AppendError(env, env.errors, m, ERR_ILLEGAL_C_IMPORT,
@@ -206,6 +206,12 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
           }
         }
         return; // This is valid
+      }
+      else if(!imp.alternate)
+      {
+        imp.alternate = true;
+        // We use goto here because the return keywords prevent us from wrapping the whitelist check in a function
+        goto RESTART_IMPORT_CHECK;
       }
 
       if(IsSystemImport(imp.module_name, env.system))
@@ -249,10 +255,10 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
     FunctionType* func = ModuleFunction(env.modules[i], exp.index);
     if(!func)
       AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_INDEX, "Invalid exported function index %u", exp.index);
-    else if(imp.func_desc.type_index >= m->type.n_functions)
+    else if(imp.func_desc.type_index >= m->type.n_functypes)
       AppendError(env, env.errors, m, ERR_INVALID_TYPE_INDEX, "Invalid imported function type index %u",
                   imp.func_desc.type_index);
-    else if(!MatchFunctionType(m->type.functions[imp.func_desc.type_index], *func))
+    else if(!MatchFunctionType(m->type.functypes[imp.func_desc.type_index], *func))
       AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_IMPORT_TYPE,
                   "Imported function signature didn't match exported function signature.");
     break;
@@ -331,9 +337,9 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
   }
 }
 
-void innative::ValidateFunction(const varuint32& decl, Environment& env, Module* m)
+void innative::ValidateFunction(const FunctionDesc& decl, Environment& env, Module* m)
 {
-  if(decl >= m->type.n_functions)
+  if(decl.type_index >= m->type.n_functypes)
     AppendError(env, env.errors, m, ERR_INVALID_TYPE_INDEX, "Invalid function declaration type index: %u", decl);
 }
 
@@ -548,8 +554,8 @@ namespace innative {
                   "[%u] 0 is not a valid table index because there are 0 tables.", ins.line);
 
     ValidatePopType(ins, values, TE_i32, env, m); // Pop callee
-    if(sig < m->type.n_functions)
-      ValidateFunctionSig(ins, values, m->type.functions[sig], env, m);
+    if(sig < m->type.n_functypes)
+      ValidateFunctionSig(ins, values, m->type.functypes[sig], env, m);
     else
       AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_INDEX,
                   "[%u] signature index was %u, which is an invalid function signature index.", ins.line, sig);
@@ -1076,12 +1082,12 @@ void innative::ValidateFunctionBody(const FunctionType& sig, const FunctionBody&
     ret = sig.returns[0];
 
   // Calculate function locals
-  if(sig.n_params > (std::numeric_limits<uint32_t>::max() - body.n_locals))
+  if(sig.n_params > (std::numeric_limits<uint32_t>::max() - body.local_size))
   {
     AppendError(env, env.errors, m, ERR_FATAL_TOO_MANY_LOCALS, "n_local + n_params exceeds the max value of uint32!");
     return;
   }
-  varuint32 n_local = sig.n_params + body.n_locals;
+  varuint32 n_local = sig.n_params + body.local_size;
 
   varsint7* locals = tmalloc<varsint7>(env, n_local);
   if(locals)
@@ -1091,7 +1097,8 @@ void innative::ValidateFunctionBody(const FunctionType& sig, const FunctionBody&
 
   n_local = sig.n_params;
   for(varuint32 i = 0; i < body.n_locals; ++i)
-    locals[n_local++] = body.locals[i];
+    for(varuint32 j = 0; j < body.locals[i].count; ++j)
+      locals[n_local++] = body.locals[i].type;
 
   control.Push({ values.Limit(), ret, OP_block }); // Push the function body block with the function signature
 
@@ -1143,7 +1150,7 @@ void innative::ValidateFunctionBody(const FunctionType& sig, const FunctionBody&
   }
 
   for(varuint32 i = 0; i < sig.n_returns; ++i)
-    ValidatePopType(Instruction{ 0, 0, body.debug.line, body.debug.column }, values, sig.returns[i], env, m);
+    ValidatePopType(Instruction{ 0, 0, body.line, body.column }, values, sig.returns[i], env, m);
 
   if(control.Size() > 0)
     AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_BODY, "Control stack not fully terminated, off by %zu",
@@ -1205,9 +1212,6 @@ void innative::ValidateImportOrder(Module& m)
   }
 }
 
-//#include "serialize.h"
-//#include <iostream>
-
 void innative::ValidateModule(Environment& env, Module& m)
 {
   if(m.magic_cookie != WASM_MAGIC_COOKIE)
@@ -1219,27 +1223,20 @@ void innative::ValidateModule(Environment& env, Module& m)
 
   ValidateImportOrder(m);
 
-  //{
-  // Queue<wat::WatToken> auxtokens;
-  // wat::TokenizeModule(env, auxtokens, m);
-  // wat::WriteTokens(auxtokens, std::cout);
-  // std::cout << std::endl;
-  //}
-
   if(ModuleTable(m, 1) != nullptr)
     AppendError(env, env.errors, &m, ERR_MULTIPLE_TABLES, "Cannot have more than 1 table defined.");
   if(ModuleMemory(m, 1) != nullptr)
     AppendError(env, env.errors, &m, ERR_MULTIPLE_MEMORIES, "Cannot have more than 1 memory defined.");
 
   if(m.knownsections & (1 << WASM_SECTION_TYPE))
-    ValidateSection<FunctionType, &ValidateFunctionSig>(m.type.functions, m.type.n_functions, env, &m);
+    ValidateSection<FunctionType, &ValidateFunctionSig>(m.type.functypes, m.type.n_functypes, env, &m);
 
   if(m.knownsections & (1 << WASM_SECTION_IMPORT))
     ValidateSection<Import, &ValidateImport>(m.importsection.imports, m.importsection.n_import, env, &m);
 
   if(m.knownsections & (1 << WASM_SECTION_FUNCTION))
   {
-    ValidateSection<varuint32, &ValidateFunction>(m.function.funcdecl, m.function.n_funcdecl, env, &m);
+    ValidateSection<FunctionDesc, &ValidateFunction>(m.function.funcdecl, m.function.n_funcdecl, env, &m);
 
     if(m.function.n_funcdecl != m.code.n_funcbody)
       AppendError(env, env.errors, &m, ERR_FUNCTION_BODY_MISMATCH,
@@ -1282,8 +1279,8 @@ void innative::ValidateModule(Environment& env, Module& m)
   {
     for(varuint32 j = 0; j < m.code.n_funcbody; ++j)
     {
-      if(m.function.funcdecl[j] < m.type.n_functions)
-        ValidateFunctionBody(m.type.functions[m.function.funcdecl[j]], m.code.funcbody[j], env, &m);
+      if(m.function.funcdecl[j].type_index < m.type.n_functypes)
+        ValidateFunctionBody(m.type.functypes[m.function.funcdecl[j].type_index], m.code.funcbody[j], env, &m);
     }
   }
 
@@ -1294,8 +1291,7 @@ void innative::ValidateModule(Environment& env, Module& m)
 // Performs all post-load validation that couldn't be done during parsing
 void innative::ValidateEnvironment(Environment& env)
 {
-  if(!(env.flags & ENV_CHECK_MEMORY_ACCESS))
-    AppendIntrinsics(env);
+  AppendIntrinsics(env);
 
   for(size_t i = 0; i < env.n_modules; ++i)
     ValidateModule(env, env.modules[i]);

@@ -1,4 +1,4 @@
-// Copyright (c)2019 Black Sphere Studios
+// Copyright (c)2020 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
 // The Computer Language Benchmarks Game
@@ -19,12 +19,12 @@
 #define PREFERRED_NUMBER_OF_BLOCKS_TO_USE 12
 
 #ifdef TESTING_WASM
-#include "benchmark.h"
-#include <stdint.h>
+  #include "benchmark.h"
+  #include <stdint.h>
 
 int Benchmarks::fannkuch_redux(int n)
 #else
-#include <stdint.h>
+  #include <stdint.h>
 
 extern "C" void* malloc(uintptr_t n);
 extern "C" __attribute__((visibility("default"))) int fannkuch_redux(int n)

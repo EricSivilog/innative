@@ -1,7 +1,7 @@
-// Copyright (c)2019 Black Sphere Studios
+// Copyright (c)2020 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#include "util.h"
+#include "utility.h"
 #include "innative/export.h"
 #include <assert.h>
 #include <stdexcept>
@@ -9,17 +9,17 @@
 #include <algorithm>
 
 #ifdef IN_PLATFORM_WIN32
-#include "../innative/win32.h"
-#include <intrin.h>
+  #include "../innative/win32.h"
+  #include <intrin.h>
 #elif defined(IN_PLATFORM_POSIX)
-#include <unistd.h>
-#include <cpuid.h>
-#include <limits.h>
-#include <dlfcn.h>
-#include <sys/mman.h>
-#include <dirent.h>
+  #include <unistd.h>
+  #include <cpuid.h>
+  #include <limits.h>
+  #include <dlfcn.h>
+  #include <sys/mman.h>
+  #include <dirent.h>
 #else
-#error unknown platform
+  #error unknown platform
 #endif
 
 using std::string;
@@ -39,11 +39,11 @@ void* IN_WASM_ALLOCATOR::allocate(size_t n)
         ; // Spin until all reads are done
 
       size_t len = std::max<size_t>(end, 4096) * 2;
-      void* prev = malloc(len);
+      char* prev = reinterpret_cast<char*>(malloc(len));
       if(prev != nullptr)
       {
         list.push_back({ prev, len }); // Add real pointer and size to our destructor list
-        mem.exchange((char*)prev - index,
+        mem.exchange(prev - index,
                      std::memory_order_release); // backtrack to trick the current index into pointing to the right address
       }
       else // If malloc failed, set the memory pointer to NULL, but increase sz anyway to unblock other threads
@@ -58,7 +58,7 @@ void* IN_WASM_ALLOCATOR::allocate(size_t n)
   if(!m) // mem can be NULL if we ran out of memory
     return nullptr;
   commit.fetch_add(n, std::memory_order_acq_rel);
-  return (char*)m + index;
+  return reinterpret_cast<char*>(m) + index;
 }
 
 IN_WASM_ALLOCATOR::~IN_WASM_ALLOCATOR()
@@ -76,7 +76,7 @@ IN_WASM_ALLOCATOR::~IN_WASM_ALLOCATOR()
 
 namespace innative {
   namespace utility {
-    KHASH_INIT(opnames, StringRef, uint8_t, 1, internal::__ac_X31_hash_stringrefins, kh_int_hash_equal);
+    KHASH_INIT(opnames, StringSpan, uint8_t, 1, internal::__ac_X31_hash_stringrefins, kh_int_hash_equal);
 
     kh_opnames_t* GenOpNames()
     {
@@ -87,7 +87,7 @@ namespace innative {
       {
         if(strcmp(OPNAMES[i], "RESERVED") != 0)
         {
-          khiter_t iter   = kh_put_opnames(h, StringRef{ OPNAMES[i], strlen(OPNAMES[i]) }, &r);
+          khiter_t iter   = kh_put_opnames(h, StringSpan{ OPNAMES[i], strlen(OPNAMES[i]) }, &r);
           kh_val(h, iter) = (uint8_t)i;
         }
       }
@@ -130,8 +130,8 @@ namespace innative {
 
       for(auto& i : legacy)
       {
-        khiter_t iter = kh_put_opnames(h, StringRef{ i.first, strlen(i.first) }, &r);
-        khint_t k     = kh_get_opnames(h, StringRef{ i.second, strlen(i.second) });
+        khiter_t iter = kh_put_opnames(h, StringSpan{ i.first, strlen(i.first) }, &r);
+        khint_t k     = kh_get_opnames(h, StringSpan{ i.second, strlen(i.second) });
         assert(k != kh_end(h));
         kh_val(h, iter) = kh_val(h, k);
       }
@@ -139,7 +139,7 @@ namespace innative {
       return h;
     }
 
-    uint8_t GetInstruction(StringRef ref)
+    uint8_t GetInstruction(StringSpan ref)
     {
       static const kh_opnames_t* h = GenOpNames();
 
@@ -153,17 +153,17 @@ namespace innative {
         return m.importsection.imports[index].func_desc.type_index;
       index -= m.importsection.functions;
       if(index < m.function.n_funcdecl)
-        return m.function.funcdecl[index];
+        return m.function.funcdecl[index].type_index;
       return (varuint32)~0;
     }
 
     FunctionType* ModuleFunction(const Module& m, varuint32 index)
     {
       if(index < m.importsection.functions)
-        return &m.type.functions[m.importsection.imports[index].func_desc.type_index];
+        return &m.type.functypes[m.importsection.imports[index].func_desc.type_index];
       index -= m.importsection.functions;
       if(index < m.function.n_funcdecl)
-        return &m.type.functions[m.function.funcdecl[index]];
+        return &m.type.functypes[m.function.funcdecl[index].type_index];
       return nullptr;
     }
     TableDesc* ModuleTable(const Module& m, varuint32 index)
@@ -268,7 +268,10 @@ namespace innative {
       buf.resize(GetModuleFileNameW(NULL, const_cast<wchar_t*>(buf.data()), (DWORD)buf.capacity()));
       return path(std::move(buf));
 #else
-      return path(std::move(GetAbsolutePath(GetPath(arg0))));
+      char result[PATH_MAX];
+      if(readlink("/proc/self/exe", result, PATH_MAX) == -1)
+        return path(std::move(GetAbsolutePath(GetPath(arg0))));
+      return utility::GetPath(result);
 #endif
     }
 
@@ -281,10 +284,11 @@ namespace innative {
 #elif defined(IN_PLATFORM_POSIX)
       string buf;
       buf.resize(PATH_MAX);
-      getcwd(const_cast<char*>(buf.data()), buf.capacity());
+      if(!getcwd(const_cast<char*>(buf.data()), buf.capacity()))
+        return path();
       buf.resize(strlen(buf.data()));
 #else
-#error unknown platform
+  #error unknown platform
 #endif
       return path(std::move(buf));
     }
@@ -303,7 +307,7 @@ namespace innative {
         return path(src);
       buf.resize(strlen(resolve));
 #else
-#error unknown platform
+  #error unknown platform
 #endif
       return path(std::move(buf));
     }
@@ -333,24 +337,31 @@ namespace innative {
       info[4] = sysinfo.wProcessorArchitecture | (flags << 16);
       __cpuid(info, 1);
 #elif defined(IN_PLATFORM_POSIX)
-#ifdef IN_CPU_x86_64
+  #ifdef IN_CPU_x86_64
       info[4] = 1;
-#elif defined(IN_CPU_IA_64)
+  #elif defined(IN_CPU_IA_64)
       info[4] = 2;
-#elif defined(IN_CPU_x86)
+  #elif defined(IN_CPU_x86)
       info[4] = 3;
-#elif defined(IN_CPU_ARM)
+  #elif defined(IN_CPU_ARM)
       info[4] = 4;
-#elif defined(IN_CPU_MIPS)
+  #elif defined(IN_CPU_MIPS)
       info[4] = 5;
-#elif defined(IN_CPU_POWERPC)
+  #elif defined(IN_CPU_POWERPC)
       info[4] = 6;
-#elif defined(IN_CPU_ARM64)
+  #elif defined(IN_CPU_ARM64)
       info[4] = 7;
-#endif
+  #endif
       info[4] |= (flags << 16);
       __get_cpuid(1, info + 0, info + 1, info + 2, info + 3);
 #endif
+    }
+
+    int AddCImport(const Environment& env, const char* id)
+    {
+      int r;
+      kh_put_cimport(env.cimports, ByteArray::Identifier(id, strlen(id)), &r);
+      return r;
     }
 
 #ifdef IN_PLATFORM_WIN32

@@ -1,92 +1,46 @@
-// Copyright (c)2019 Black Sphere Studios
+// Copyright (c)2020 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #ifndef IN__LLVM_H
 #define IN__LLVM_H
 
 #include "innative/schema.h"
-#include "stack.h"
+
 #pragma warning(push)
-#pragma warning(disable : 4146 4267 4141 4244 4624)
+#pragma warning(disable : 4146 4267 4141 4244 4624 4996 4530)
 #define _SCL_SECURE_NO_WARNINGS
+#define _SILENCE_ALL_CXX17_DEPRECATION_WARNINGS
+#include "llvm/Analysis/TargetTransformInfo.h"
+#include "llvm/Analysis/TargetTransformInfoImpl.h"
 #include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/CallSite.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
-#include "llvm/IR/Function.h"
-#include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/DIBuilder.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/InstIterator.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
+#include "llvm/IR/Verifier.h"
+#include "llvm/IRReader/IRReader.h"
+#include "llvm/Linker/Linker.h"
+#include "llvm/MC/SubtargetFeature.h"
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/SourceMgr.h"
+#include "llvm/Support/TargetRegistry.h"
+#include "llvm/Support/TargetSelect.h"
 #include "llvm/Target/TargetMachine.h"
+#include "llvm/DebugInfo/DIContext.h"
+#include "llvm/DebugInfo/DWARF/DWARFContext.h"
+#include "llvm/DebugInfo/DWARF/DWARFExpression.h"
+#include "llvm/Object/Archive.h"
+#include "llvm/Object/MachOUniversal.h"
+#include "llvm/Object/ObjectFile.h"
+#include "lld/Common/Driver.h"
 #pragma warning(pop)
-
-namespace innative {
-  namespace code {
-    struct Intrinsic;
-
-    struct BlockResult
-    {
-      llvm::Value* v;
-      llvm::BasicBlock* b;
-      BlockResult* next;
-    };
-
-    struct Block
-    {
-      llvm::BasicBlock* block;  // Label
-      llvm::BasicBlock* ifelse; // Label for else statement
-      size_t limit;             // Limit of value stack
-      varsint7 sig;             // Block signature
-      uint8_t op;               // instruction that pushed this label
-      llvm::DIScope* scope;     // Debug lexical scope for this block
-      BlockResult* results;     // Holds alternative branch results targeting this block
-    };
-
-    struct Function
-    {
-      llvm::Function* internal;
-      llvm::Function* exported;
-      llvm::Function* imported;
-      Intrinsic* intrinsic;
-      llvm::AllocaInst* memlocal;
-    };
-
-    KHASH_DECLARE(importhash, const char*, llvm::GlobalObject*);
-
-    struct Context
-    {
-      const Environment& env;
-      Module& m;
-      llvm::LLVMContext& context;
-      llvm::Module* llvm;
-      llvm::IRBuilder<>& builder;
-      llvm::TargetMachine* machine;
-      kh_importhash_t* importhash;
-      llvm::IntegerType* intptrty;
-      llvm::DIBuilder* dbuilder;
-      llvm::DIType* diF32;
-      llvm::DIType* diF64;
-      llvm::DIType* diI32;
-      llvm::DIType* diI64;
-      llvm::DIType* diI1;
-      llvm::DIType* diVoid;
-      llvm::DICompileUnit* dcu;
-      llvm::DIFile* dunit;
-      Stack<llvm::Value*> values; // Tracks the current value stack
-      Stack<Block> control;       // Control flow stack
-      std::vector<llvm::AllocaInst*> locals;
-      llvm::AllocaInst* memlocal;
-      std::vector<llvm::GlobalVariable*> memories;
-      std::vector<llvm::GlobalVariable*> tables;
-      std::vector<llvm::GlobalVariable*> globals;
-      std::vector<Function> functions;
-      llvm::Function* init;
-      llvm::Function* exit;
-      llvm::Function* start;
-      llvm::Function* memgrow;
-    };
-  }
-}
 
 #endif

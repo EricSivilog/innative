@@ -1,4 +1,4 @@
-// Copyright (c)2019 Black Sphere Studios
+// Copyright (c)2020 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #ifndef IN__FLAGS_H
@@ -10,38 +10,38 @@ extern "C" {
 
 enum WASM_ENVIRONMENT_FLAGS
 {
-  // Adds debugging information to the webassembly module, which may include producing a `.pdb` file in addition to the
-  // normal output, depending on platform. Currently, this will only produce meaningful debug output for `.wat`and `.wast`
-  // files, as inNative can't automatically deserialize webassembly yet.
-  ENV_DEBUG = (1 << 0),
+  // Adds debugging information to the webassembly module, either as a PDB file or as a DWARF file, depending on platform.
+  ENV_DEBUG       = (3 << 0),
+  ENV_DEBUG_PDB   = (2 << 0), // Forces PDB generation
+  ENV_DEBUG_DWARF = (1 << 0), // Forces DWARF generation
 
   // Specifies that the result should be a dynamic library instead of an executable. Any start function will be ignored, and
   // the resulting DLL or `.so` file will export all symbols that are exported from all the modules being compiled. These
   // symbol names will be mangled, but can be accessed from C if you know the resulting mangled name. This does not produce
   // a static library because the dynamic library performs initialization and cleanup of global variables when loaded and
   // unloaded. If you know what you're doing, you can perform this initialization yourself by specifying ENV_NOINIT.
-  ENV_LIBRARY = (1 << 1),
+  ENV_LIBRARY = (1 << 2),
 
   // Enables the C function whitelist.If the whitelist is not enabled, the webassembly module will be able to call any C
   // function that it is linked to, which includes all kernel functions on windows. Enabling the whitelist without providing
   // a list of functions will effectively prevent the webassembly module from calling any external C function.
-  ENV_WHITELIST = (1 << 2),
+  ENV_WHITELIST = (1 << 3),
 
   // Enables compiling .wat and .wast files
-  ENV_ENABLE_WAT = (1 << 3),
+  ENV_ENABLE_WAT = (1 << 4),
 
   // Attempts to compile the modules in parallel as much as possible (Experimental).
-  ENV_MULTITHREADED = (1 << 4),
+  ENV_MULTITHREADED = (1 << 5),
 
   // Outputs a `.llvm` file in the target output directory for each module being compiled that outputs the optimized, final
   // LLVM IR that is compiled to machine code. This can be used to investigate compiler bugs or unexpected behavior.
-  ENV_EMIT_LLVM = (1 << 5),
+  ENV_EMIT_LLVM = (1 << 6),
 
   // When testing, due to C++ not being able to dynamically generate calling conventions, it is useful to "homogenize" all
   // functions to always return `i64` and transform every single parameter into an `i64` parameter. This makes it easier to
   // generate function pointers for the test harness.This may be useful for game scripting APIs in certain contexts, but in
   // most cases is unnecessary and simply adds overhead.
-  ENV_HOMOGENIZE_FUNCTIONS = (1 << 6),
+  ENV_HOMOGENIZE_FUNCTIONS = (1 << 7),
 
   // Normally, inNative will create a dynamic library that automatically calls it's initialization function when it is
   // loaded into memory, using the operating system's global initialization handles, and free it's global resources when it
@@ -49,7 +49,7 @@ enum WASM_ENVIRONMENT_FLAGS
   // freed, and may want the option of freeing and re-instantiating the module without having to unload it from memory. To
   // prevent the initialization and cleanup functions from being automatically called, use this flag, but be sure you call
   // them from your code correctly.
-  ENV_NO_INIT = (1 << 7),
+  ENV_NO_INIT = (1 << 8),
 
   // Some platforms, like windows, always require a stack probe if there is any possibility of skipping the stack guard
   // page. This option ensures that a stack probe is always done, even on linux, if a large stack space is requested. This
@@ -80,6 +80,11 @@ enum WASM_ENVIRONMENT_FLAGS
   // The webassembly standard currently does not allow tail calls to prevent stack overflows from turning into endless loops
   // that lock up a web browser. This option is provided purely for compatibility with the standard.
   ENV_DISABLE_TAIL_CALL = (1 << 15),
+
+  // DWARF's "is_stmt" flag marks which assembly lines are actually source code statements, but it is not always reliable.
+  ENV_DEBUG_DETECT_IS_STMT = 0, // By default, we check if there are is_stmt flags anywhere and if they exist we use them.
+  ENV_DEBUG_USE_IS_STMT    = (1 << 20), // ONLY generates debug information for lines marked with is_stmt, no matter what.
+  ENV_DEBUG_IGNORE_IS_STMT = (2 << 20), // ALWAYS generates debug information for all assembly lines, ignoring is_stmt.
 
   // Strictly adheres to the standard, provided the optimization level does not exceed ENV_OPTIMIZE_STRICT.
   ENV_STRICT = ENV_CHECK_STACK_OVERFLOW | ENV_CHECK_FLOAT_TRUNC | ENV_CHECK_MEMORY_ACCESS | ENV_CHECK_INDIRECT_CALL |
